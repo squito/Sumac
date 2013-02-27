@@ -4,14 +4,19 @@ import Keys._
 object SparkBuild extends Build {
   lazy val core = Project("core", file("."), settings = coreSettings)
 
+  val qf = "http://repo.quantifind.com/content/repositories/"
   def sharedSettings = Defaults.defaultSettings ++ Seq(
-    version := "0.1",
+    version := "0.1-SNAPSHOT",
     scalaVersion := "2.9.1",
     scalacOptions := Seq(/*"-deprecation",*/ "-unchecked", "-optimize"), // -deprecation is too noisy due to usage of old Hadoop API, enable it once that's no longer an issue
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
     transitiveClassifiers in Scope.GlobalScope := Seq("sources"),
-    publishTo <<= baseDirectory { base => Some(Resolver.file("Local", base / "target" / "maven" asFile)(Patterns(true, Resolver.mavenStyleBasePattern))) },
+    //publishTo <<= baseDirectory { base => Some(Resolver.file("Local", base / "target" / "maven" asFile)(Patterns(true, Resolver.mavenStyleBasePattern))) },
+    publishTo <<= version {
+      (v: String) =>
+        Some("snapshots" at qf + "ext-snapshots")
+    },
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "1.6.1" % "test"
     )
