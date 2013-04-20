@@ -62,15 +62,11 @@ class FieldArgsTest extends FunSuite with ShouldMatchers {
 
   test("error msg on unknown types") {
     val o = new SpecialTypes("", null) with FieldArgs
-
-    o.parse(Array("--name", "ooga"))
-    o.name should be ("ooga")
-    o.funky should be (null)
-
-    val exc = evaluating {o.parse(Array("--funky", "xyz"))} should produce [ArgException]
-    //maybe sometime I should change the removal of unknown types to keep them around for error msgs ...
-//    exc.cause.getMessage should include ("type")
-//    exc.cause.getMessage should include ("MyFunkyType")
+    // originally I had intended this error to be thrown on a call to parse w/ the bad argument, but I guess its OK
+    // to have it thrown on any call to parse
+    val exc = evaluating {o.parse(Array("--name", "blah"))} should produce [ArgException]
+    exc.getMessage should include ("type")
+    exc.getMessage should include ("MyFunkyType")
   }
 
 
@@ -83,14 +79,21 @@ class FieldArgsTest extends FunSuite with ShouldMatchers {
   }
 
   test("set args") {
-    case class SetArgs(val set: Set[String]) extends FieldArgs
+    case class SetArgs(var set: Set[String]) extends FieldArgs
     val s = new SetArgs(null)
     s.parse(Array("--set", "a,b,c,def"))
     s.set should be (Set("a", "b", "c", "def"))
   }
 
+  test("help") {
+    val s = new IgnoredArgs()
+    val exc = evaluating {s.parse(Array("--help"))} should produce [ArgException]
+    """unknown option""".r findFirstIn (exc.getMessage) should be ('empty)
+    """\-\-x\s.*[Ii]nt""".r findFirstIn(exc.getMessage) should be ('defined)
+  }
+
   test("selectInput") {
-    case class SelectInputArgs(val select: SelectInput[String] = SelectInput("a", "b", "c")) extends FieldArgs
+    case class SelectInputArgs(var select: SelectInput[String] = SelectInput("a", "b", "c")) extends FieldArgs
     val s = new SelectInputArgs()
     val id = System.identityHashCode(s.select)
     s.parse(Array("--select", "b"))
@@ -105,7 +108,7 @@ class FieldArgsTest extends FunSuite with ShouldMatchers {
     import util.Random._
     val max = 1000
     val orderedChoices = shuffle(1.to(max).map(_.toString))
-    case class SelectInputArgs(val select: SelectInput[String] = SelectInput(orderedChoices:_*)) extends FieldArgs
+    case class SelectInputArgs(var select: SelectInput[String] = SelectInput(orderedChoices:_*)) extends FieldArgs
     val s = new SelectInputArgs()
     val id = System.identityHashCode(s.select)
     
@@ -119,7 +122,7 @@ class FieldArgsTest extends FunSuite with ShouldMatchers {
   }
 
   test("multiSelectInput") {
-    case class MultiSelectInputArgs(val multiSelect: MultiSelectInput[String] = MultiSelectInput("a", "b", "c")) extends FieldArgs
+    case class MultiSelectInputArgs(var multiSelect: MultiSelectInput[String] = MultiSelectInput("a", "b", "c")) extends FieldArgs
     val s = new MultiSelectInputArgs()
     val id = System.identityHashCode(s.multiSelect)
     s.parse(Array("--multiSelect", "b"))
@@ -208,19 +211,60 @@ class FieldArgsTest extends FunSuite with ShouldMatchers {
 
     evaluating {c.parse(Array("--z", "0"))} should produce [Exception]
   }
+
+  test("private fields ignored") {
+    val c = new ArgsWithPrivateFields()
+
+    c.parse(Array("--x","7"))
+    c.x should be (7)
+
+    c.parser.nameToHolder should not contain key ("q")
+  }
+
+  test("vals ignored") {
+    val c = new ArgsWithVals()
+
+    c.parse(Array("--x", "19"))
+    c.x should be (19)
+
+    c.parser.nameToHolder should not contain key ("y")
+  }
+
+  test("respect ignore annotation") {
+    val c = new IgnoredArgs()
+    c.parse(Array("--x", "123"))
+    c.x should be (123)
+
+    c.parser.nameToHolder should not contain key ("y")
+  }
+
+  test("getStringValues") {
+    val c = new IgnoredArgs()
+    c.x = 35245
+    c.getStringValues should be (Map("x"-> "35245"))
+
+    val a = new ArgsWithCustomType()
+    a.x = 5
+    a.y = CustomType("blah", 17)
+    a.getStringValues should be (Map(
+      "x" -> "5",
+      "y" -> "blah:17",
+      "z" -> Parser.nullString
+    ))
+  }
 }
 
 
-case class StringHolder(val name: String, val comment: String)
+case class StringHolder(var name: String, var comment: String)
 
-case class MixedTypes(val name: String, val count: Int)
+case class MixedTypes(var name: String, var count: Int)
 
 //is there an easier way to do this in scala?
-class Child(val flag: Boolean, name: String, count: Int) extends MixedTypes(name, count)
+class Child(var flag: Boolean, name: String, count: Int) extends MixedTypes(name, count)
 
-case class SpecialTypes(val name: String, val funky: MyFunkyType)
+case class SpecialTypes(var name: String, var funky: MyFunkyType)
 
-case class MyFunkyType(val x: String)
+case class MyFunkyType(var x: String)
 
 
 class SomeApp extends ArgApp[SomeArgs] {
@@ -254,6 +298,10 @@ object CustomTypeParser extends Parser[CustomType] {
     val parts = s.split(":")
     CustomType(parts(0), parts(1).toInt)
   }
+  override def valueAsString(currentVal: AnyRef) = {
+    val ct = currentVal.asInstanceOf[CustomType]
+    ct.name + ":" + ct.x
+  }
 }
 
 class ArgsWithCustomType extends FieldArgs {
@@ -276,4 +324,20 @@ class ArgsWithValidation extends FieldArgs {
     if (z < 5)
       throw new RuntimeException("z must be greater than 5 -- was " + z)
   }
+}
+
+class ArgsWithPrivateFields extends FieldArgs {
+  var x: Int = _
+  private var q: Int = _
+}
+
+class ArgsWithVals extends FieldArgs {
+  var x: Int = _
+  val y = 18
+}
+
+class IgnoredArgs extends FieldArgs {
+  var x: Int = _
+  @Ignore
+  var y: Int = _
 }
