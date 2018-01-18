@@ -17,9 +17,10 @@ import annotation.tailrec
 
 object SumacBuild extends Build {
   
-  lazy val core = Project("core", file("core"), settings = coreSettings).settings(net.virtualvoid.sbt.graph.Plugin.graphSettings: _*)
-  lazy val ext = Project("ext", file("ext"), settings = extSettings).settings(net.virtualvoid.sbt.graph.Plugin.graphSettings: _*) dependsOn(core)
-  lazy val extZk = Project("ext-zk", file("ext-zk"), settings = extZkSettings).settings(net.virtualvoid.sbt.graph.Plugin.graphSettings: _*) dependsOn(core)
+  lazy val core = Project("core", file("core"), settings = coreSettings)
+  lazy val ext = Project("ext", file("ext"), settings = extSettings).dependsOn(core)
+  lazy val extZk = Project("ext-zk", file("ext-zk"), settings = extZkSettings).dependsOn(core)
+  lazy val meta = Project("meta", file("meta"), settings = metaSettings)
 
   def sharedSettings = Defaults.defaultSettings ++
   ReleasePlugin.releaseSettings ++
@@ -153,6 +154,10 @@ object SumacBuild extends Build {
     libraryDependencies ++= Seq(
       "com.twitter"   %% "util-zk"   % "6.26.0"
     )
+  )
+
+  def metaSettings = sharedSettings ++ Seq(
+    libraryDependencies += "org.scalameta" %% "scalameta" % "2.1.2"
   )
 
 }
