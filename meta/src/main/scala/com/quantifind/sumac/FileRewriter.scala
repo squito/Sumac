@@ -35,10 +35,15 @@ object FileRewriter {
 
   def rewriteBody(pkg: Pkg): List[Stat] = {
     // change the package name
+    println(pkg.tokens)
+    println("*********")
     List(pkg.ref match {
-      case Term.Select(qual, name @ Term.Name(FROM)) =>
-        val newRef = Term.Select(qual, name.copy(value = TO))
-        pkg.copy(ref = newRef)
+      case select @ Term.Select(qual, name @ Term.Name(FROM)) =>
+        val newRef = select.copy(name = name.copy(value = TO))
+        // TODO :( this loses the comments on the original, no longer in the tokens :( :(
+        val r = pkg.copy(ref = newRef)
+        println(r.tokens)
+        r
       case other =>
         pkg
     })
